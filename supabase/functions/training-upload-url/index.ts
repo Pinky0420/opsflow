@@ -1,6 +1,9 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { createSupabaseAdminClient, createSupabaseUserClient } from "../_shared/supabase.ts";
 
+// deno-lint-ignore no-explicit-any
+const Deno = (globalThis as any).Deno;
+
 function sanitizeFileName(name: string): string {
   return name.replace(/[^a-zA-Z0-9.\-_]/g, "_").slice(0, 200);
 }
@@ -22,7 +25,8 @@ function validateUpload(fileName: string, fileSize: number): string | null {
 }
 
 Deno.serve(async (req: Request) => {
-  const headers = corsHeaders(req);
+  const origin = req.headers.get("origin");
+  const headers = corsHeaders(origin);
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
 
   const url = new URL(req.url);
@@ -64,6 +68,21 @@ Deno.serve(async (req: Request) => {
     const objectPath = `${id}/${Date.now()}_${sanitizeFileName(body.file_name)}`;
     const { data: signed, error: signedError } = await admin.storage.from("training-files").createSignedUploadUrl(objectPath);
     if (signedError || !signed) return new Response(JSON.stringify({ error: "signed_upload_failed" }), { status: 500, headers: { ...headers, "Content-Type": "application/json" } });
+
+    const { error: updateError } = await admin
+      .from("training_materials")
+      .update({
+        file_bucket: "training-files",
+        file_path: objectPath,
+        file_name: body.file_name,
+        file_size: body.file_size,
+        mime_type: body.content_type || null,
+        updated_by: user.id,
+      })
+      .eq("id", id);
+    if (updateError) {
+      return new Response(JSON.stringify({ error: updateError.message || "update_failed" }), { status: 500, headers: { ...headers, "Content-Type": "application/json" } });
+    }
 
     return new Response(JSON.stringify({ bucket: "training-files", path: objectPath, signedUrl: signed.signedUrl, token: signed.token }), {
       headers: { ...headers, "Content-Type": "application/json" },

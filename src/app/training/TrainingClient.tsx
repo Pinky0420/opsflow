@@ -359,31 +359,6 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
         onProgress: (p) => setUploadProgress(p),
       });
 
-      setUploadStep("更新資料庫...");
-      const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim().replace(/\/$/, "");
-      const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
-      if (!apiBase) throw new Error("update_failed: missing_api_base_url");
-      if (!anonKey) throw new Error("update_failed: missing_anon_key");
-      const completeRes = await fetch(`${apiBase}/training-complete-upload`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          apikey: anonKey,
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          material_id: id,
-          file_path: uploaded.filePath,
-          file_name: file.name,
-          file_size: file.size,
-          mime_type: uploaded.mimeType,
-        }),
-      });
-      const completeJson = (await completeRes.json()) as { ok?: boolean; error?: string };
-      if (!completeRes.ok || !completeJson.ok) {
-        throw new Error(`update_failed: HTTP ${completeRes.status} ${completeJson.error || ""}`);
-      }
-
       setUploadOk(id);
       setUploadStep(null);
       setTitle("");
