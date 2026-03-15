@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { stripAppBasePath } from "@/lib/appPath";
 
 export default function TrainingNav() {
-  const rawPathname = usePathname();
-  const pathname = stripAppBasePath(rawPathname);
-  const isRead = pathname === "/training" || pathname.startsWith("/training/");
-  const isUpload = pathname === "/training/upload";
+  const nextPathname = usePathname();
+  const fullPath = (typeof window !== "undefined" ? window.location.pathname : nextPathname)
+    .replace(/\/$/, "");
+  const isUpload = fullPath.endsWith("/training/upload");
+  const isRead = !isUpload && (fullPath.endsWith("/training") || fullPath.includes("/training/"));
 
   return (
     <div className="rounded-xl border bg-white p-1.5 shadow-sm sm:p-2">
