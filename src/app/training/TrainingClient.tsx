@@ -307,6 +307,8 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
       const { data: { user }, error: authErr } = await supabase.auth.getUser();
       if (authErr) throw new Error(`auth_error: ${authErr.message}`);
       if (!user) throw new Error("unauthorized");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("unauthorized");
 
       const insertBody = {
         title: title.trim(),
@@ -358,10 +360,17 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
       });
 
       setUploadStep("更新資料庫...");
-      const completeRes = await apiFetch("/api/training/complete-upload", {
+      const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim().replace(/\/$/, "");
+      const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
+      if (!apiBase) throw new Error("update_failed: missing_api_base_url");
+      if (!anonKey) throw new Error("update_failed: missing_anon_key");
+      const completeRes = await fetch(`${apiBase}/training-complete-upload`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        auth: true,
+        headers: {
+          "content-type": "application/json",
+          apikey: anonKey,
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           material_id: id,
           file_path: uploaded.filePath,
@@ -369,7 +378,7 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
           file_size: file.size,
           mime_type: uploaded.mimeType,
         }),
-      } as Parameters<typeof apiFetch>[1]);
+      });
       const completeJson = (await completeRes.json()) as { ok?: boolean; error?: string };
       if (!completeRes.ok || !completeJson.ok) {
         throw new Error(`update_failed: HTTP ${completeRes.status} ${completeJson.error || ""}`);
