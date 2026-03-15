@@ -47,6 +47,20 @@ function errorMessage(code: string) {
   return code;
 }
 
+async function readJsonOrText<T>(response: Response): Promise<{ json: T | null; text: string | null }> {
+  try {
+    const json = (await response.json()) as T;
+    return { json, text: null };
+  } catch {
+    try {
+      const text = await response.text();
+      return { json: null, text };
+    } catch {
+      return { json: null, text: null };
+    }
+  }
+}
+
 export default function AccessManagementClient({ initialItems }: Props) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
@@ -79,9 +93,11 @@ export default function AccessManagementClient({ initialItems }: Props) {
         auth: true,
       });
 
-      const payload = (await response.json()) as { error?: string; item?: AccessItem };
-      if (!response.ok || !payload.item) {
-        setError(errorMessage(payload.error ?? "create_failed"));
+      const { json: payload, text } = await readJsonOrText<{ error?: string; item?: AccessItem }>(response);
+      if (!response.ok || !payload?.item) {
+        const status = `${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+        const raw = payload?.error ?? (text ? `raw:${text.slice(0, 300)}` : null);
+        setError(errorMessage(raw ? `${raw} (HTTP ${status})` : `create_failed (HTTP ${status})`));
         return;
       }
 
@@ -120,9 +136,11 @@ export default function AccessManagementClient({ initialItems }: Props) {
         auth: true,
       });
 
-      const payload = (await response.json()) as { error?: string; ok?: boolean };
+      const { json: payload, text } = await readJsonOrText<{ error?: string; ok?: boolean }>(response);
       if (!response.ok) {
-        setError(errorMessage(payload.error ? `set_password_failed:${payload.error}` : "set_password_failed"));
+        const status = `${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+        const raw = payload?.error ?? (text ? `raw:${text.slice(0, 300)}` : null);
+        setError(errorMessage(raw ? `set_password_failed:${raw} (HTTP ${status})` : `set_password_failed (HTTP ${status})`));
         return;
       }
 
@@ -146,9 +164,12 @@ export default function AccessManagementClient({ initialItems }: Props) {
 
     try {
       const response = await apiFetch(`/api/admin/access/${id}`, { method: "DELETE", auth: true });
-      const payload = (await response.json()) as { error?: string; ok?: boolean };
+
+      const { json: payload, text } = await readJsonOrText<{ error?: string; ok?: boolean }>(response);
       if (!response.ok) {
-        setError(errorMessage(payload.error ?? "delete_failed"));
+        const status = `${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+        const raw = payload?.error ?? (text ? `raw:${text.slice(0, 300)}` : null);
+        setError(errorMessage(raw ? `${raw} (HTTP ${status})` : `delete_failed (HTTP ${status})`));
         return;
       }
 
@@ -173,9 +194,11 @@ export default function AccessManagementClient({ initialItems }: Props) {
         auth: true,
       });
 
-      const payload = (await response.json()) as { error?: string; item?: AccessItem };
-      if (!response.ok || !payload.item) {
-        setError(errorMessage(payload.error ?? "update_failed"));
+      const { json: payload, text } = await readJsonOrText<{ error?: string; item?: AccessItem }>(response);
+      if (!response.ok || !payload?.item) {
+        const status = `${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+        const raw = payload?.error ?? (text ? `raw:${text.slice(0, 300)}` : null);
+        setError(errorMessage(raw ? `${raw} (HTTP ${status})` : `update_failed (HTTP ${status})`));
         return;
       }
 
