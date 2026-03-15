@@ -1,11 +1,12 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { apiFetch } from "@/lib/api";
 
 function LoginFormContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   const redirectTo = useMemo(() => {
@@ -107,11 +108,13 @@ function LoginFormContent() {
         }
 
         if (syncPayload.require_password_setup) {
-          window.location.href = `/auth/setup-password?next=${encodeURIComponent(redirectTo)}`;
+          router.replace(`/auth/setup-password?next=${encodeURIComponent(redirectTo)}`);
+          router.refresh();
           return;
         }
 
-        window.location.href = redirectTo;
+        router.replace(redirectTo);
+        router.refresh();
         return;
       }
 
