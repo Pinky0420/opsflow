@@ -42,6 +42,12 @@ export async function apiFetch(
     ...(fetchOptions.headers as Record<string, string> ?? {}),
   };
 
+  const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
+  if (anonKey) {
+    headers["apikey"] = anonKey;
+    headers["Authorization"] = `Bearer ${anonKey}`;
+  }
+
   if (auth) {
     const token = await getBearerToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
