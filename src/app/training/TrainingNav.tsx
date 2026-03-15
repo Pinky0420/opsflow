@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { stripAppBasePath } from "@/lib/appPath";
 
 export default function TrainingNav() {
-  const pathname = usePathname();
+  const rawPathname = usePathname();
+  const pathname = stripAppBasePath(rawPathname);
   const isRead = pathname === "/training" || pathname.startsWith("/training/");
   const isUpload = pathname === "/training/upload";
 

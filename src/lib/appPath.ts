@@ -8,3 +8,10 @@ export function appPath(path: string): string {
 
   return `${base}${path}`;
 }
+
+export function stripAppBasePath(pathname: string): string {
+  if (!pathname.startsWith("/")) return pathname;
+  if (pathname === "/opsflow") return "/";
+  if (pathname.startsWith("/opsflow/")) return pathname.replace(/^\/opsflow/, "");
+  return pathname;
+}

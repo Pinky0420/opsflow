@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { stripAppBasePath } from "@/lib/appPath";
 
 type Props = {
   subtitle?: string;
@@ -139,7 +140,7 @@ function NavigationContent({ pathname, onNavigate, role, onSignOut }: { pathname
 export default function AppHeader({ subtitle, role }: Props) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const pathname = usePathname();
+  const pathname = stripAppBasePath(usePathname());
   const router = useRouter();
 
   async function handleSignOut() {
