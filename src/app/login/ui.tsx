@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { apiFetch } from "@/lib/api";
+import { appPath } from "@/lib/appPath";
 
 function LoginFormContent() {
   const router = useRouter();
@@ -113,8 +114,7 @@ function LoginFormContent() {
           return;
         }
 
-        router.replace(redirectTo);
-        router.refresh();
+        window.location.assign(appPath(redirectTo));
         return;
       }
 
