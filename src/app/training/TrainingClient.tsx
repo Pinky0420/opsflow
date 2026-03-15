@@ -358,17 +358,24 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
       });
 
       setUploadStep("更新資料庫...");
-      const { error: completeError } = await supabase.from("training_materials").update({
-        file_bucket: "training-files",
-        file_path: uploaded.filePath,
-        file_name: file.name,
-        file_size: file.size,
-        mime_type: uploaded.mimeType,
-        updated_by: user.id,
-      }).eq("id", id);
-      if (completeError) throw new Error(`update_failed: ${completeError.message || completeError.code}`);
+      const completeRes = await apiFetch("/api/training/complete-upload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        auth: true,
+        body: JSON.stringify({
+          material_id: id,
+          file_path: uploaded.filePath,
+          file_name: file.name,
+          file_size: file.size,
+          mime_type: uploaded.mimeType,
+        }),
+      } as Parameters<typeof apiFetch>[1]);
+      const completeJson = (await completeRes.json()) as { ok?: boolean; error?: string };
+      if (!completeRes.ok || !completeJson.ok) {
+        throw new Error(`update_failed: HTTP ${completeRes.status} ${completeJson.error || ""}`);
+      }
 
-      setUploadOk("ok");
+      setUploadOk(id);
       setUploadStep(null);
       setTitle("");
       setDescription("");
@@ -820,7 +827,8 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
 
             {uploadOk ? (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                上傳成功
+                <div>上傳成功</div>
+                <div className="mt-1 font-mono text-xs text-emerald-700">ID: {uploadOk}</div>
               </div>
             ) : null}
 

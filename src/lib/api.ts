@@ -33,6 +33,7 @@ export async function apiFetch(
     .replace(/^admin\/bootstrap$/, "admin-bootstrap")
     .replace(/^training\/([^/]+)\/download-url$/, "training-download-url?id=$1")
     .replace(/^training\/([^/]+)\/upload-url$/, "training-upload-url?id=$1")
+    .replace(/^training\/complete-upload$/, "training-complete-upload")
     .replace(/\//g, "-");
 
   const url = `${API_BASE}/${functionName}`;
