@@ -4,12 +4,19 @@ export function corsHeaders(origin: string | null) {
   const allowed = allowedOriginsRaw
     .split(",")
     .map((v: string) => v.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((value) => {
+      try {
+        return new URL(value).origin;
+      } catch {
+        return value;
+      }
+    });
 
   const allowOrigin = (() => {
     if (!origin) return "*";
     if (allowed.length === 0) return origin;
-    return allowed.includes(origin) ? origin : allowed[0];
+    return allowed.includes(origin) ? origin : allowed[0] ?? "*";
   })();
 
   return {
