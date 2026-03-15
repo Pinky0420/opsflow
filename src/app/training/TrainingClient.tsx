@@ -166,6 +166,7 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadOk, setUploadOk] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadStep, setUploadStep] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -300,9 +301,11 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
 
     setUploading(true);
     setUploadProgress(0);
+    setUploadStep("驗證身份...");
     try {
       const supabase = createSupabaseBrowserClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: authErr } = await supabase.auth.getUser();
+      if (authErr) throw new Error(`auth_error: ${authErr.message}`);
       if (!user) throw new Error("unauthorized");
 
       const insertBody = {
@@ -318,8 +321,9 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
         status: "active",
       };
 
+      setUploadStep("建立教材記錄...");
       const { data: material, error: insertError } = await supabase.from("training_materials").insert(insertBody).select("id").single();
-      if (insertError || !material) throw new Error(insertError?.message || "create_failed");
+      if (insertError || !material) throw new Error(`create_failed: ${insertError?.message || insertError?.code || "no data returned"}`);
 
       const deptIds = uploadVisibility === "department" ? selectedDepartments : [];
       if (deptIds.length > 0) {
@@ -327,6 +331,7 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
       }
 
       const id = material.id;
+      setUploadStep(`取得上傳連結... (id: ${id.slice(0, 8)})`);
 
       const signedRes = await apiFetch(`/api/training/${id}/upload-url`, {
         method: "POST",
@@ -337,9 +342,10 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
 
       const signedJson = (await signedRes.json()) as { bucket?: string; signedUrl?: string; token?: string; path?: string; error?: string };
       if (!signedRes.ok || !signedJson.signedUrl || !signedJson.path) {
-        throw new Error(signedJson.error || "signed_upload_failed");
+        throw new Error(`signed_upload_failed: HTTP ${signedRes.status} ${signedJson.error || ""}`);
       }
 
+      setUploadStep("上傳檔案中...");
       const uploaded = await uploadTrainingFile({
         file,
         uploadContentType,
@@ -351,6 +357,7 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
         onProgress: (p) => setUploadProgress(p),
       });
 
+      setUploadStep("更新資料庫...");
       const { error: completeError } = await supabase.from("training_materials").update({
         file_bucket: "training-files",
         file_path: uploaded.filePath,
@@ -359,9 +366,10 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
         mime_type: uploaded.mimeType,
         updated_by: user.id,
       }).eq("id", id);
-      if (completeError) throw new Error(completeError.message || "update_failed");
+      if (completeError) throw new Error(`update_failed: ${completeError.message || completeError.code}`);
 
       setUploadOk("ok");
+      setUploadStep(null);
       setTitle("");
       setDescription("");
       setKeywordInput("");
@@ -373,8 +381,12 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
 
       await refreshList();
     } catch (e) {
-      const code = e instanceof Error ? e.message : "upload_failed";
-      setUploadError(uploadErrorMessage(code));
+      const raw = e instanceof Error ? e.message : "upload_failed";
+      const colonIdx = raw.indexOf(":");
+      const code = colonIdx > 0 ? raw.slice(0, colonIdx).trim() : raw;
+      const detail = colonIdx > 0 ? raw.slice(colonIdx + 1).trim() : "";
+      setUploadError(uploadErrorMessage(code) + (detail ? `\n[${detail}]` : ""));
+      setUploadStep(null);
     } finally {
       setUploading(false);
       setTimeout(() => setUploadProgress(null), 800);
@@ -623,6 +635,10 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
           <section className="rounded-xl border bg-white p-4 shadow-sm sm:p-6">
           <h2 className="text-base font-semibold">上傳教材</h2>
 
+          <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500">
+            連線 Supabase：{(process.env.NEXT_PUBLIC_SUPABASE_URL || "(未設定)").replace(/https?:\/\//, "").split(".")[0]}
+          </div>
+
           <form onSubmit={onUpload} className="mt-4 space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
@@ -779,8 +795,14 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
             </div>
 
             {uploadError ? (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 whitespace-pre-wrap">
                 {uploadError}
+              </div>
+            ) : null}
+
+            {uploadStep ? (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                ⏳ {uploadStep}
               </div>
             ) : null}
 

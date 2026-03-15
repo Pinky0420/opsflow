@@ -245,6 +245,7 @@ for select
 to authenticated
 using (
   public.is_admin_or_boss()
+  or uploaded_by = auth.uid()
   or (
     status = 'active'
     and visibility = 'all'
