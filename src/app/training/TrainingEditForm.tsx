@@ -4,7 +4,6 @@ import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { uploadTrainingFile } from "@/lib/training/upload-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { apiFetch } from "@/lib/api";
 
 type Department = {
   id: string;
@@ -178,17 +177,21 @@ export default function TrainingEditForm(props: Props) {
 
         setUploadProgress(0);
 
-        const signedRes = await apiFetch(`/api/training/${props.id}/upload-url`, {
+        const { data: signedData, error: signedError } = await supabase.functions.invoke("training-upload-url", {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          auth: true,
-          body: JSON.stringify({ file_name: file.name, content_type: file.type || "application/octet-stream", file_size: file.size }),
-        } as Parameters<typeof apiFetch>[1]);
+          body: {
+            id: props.id,
+            file_name: file.name,
+            content_type: file.type || "application/octet-stream",
+            file_size: file.size,
+          },
+        });
 
-        const signedJson = (await signedRes.json()) as { bucket?: string; signedUrl?: string; path?: string; error?: string };
-        if (!signedRes.ok || !signedJson.signedUrl || !signedJson.path) {
-          throw new Error(uploadErrorMessage(signedJson.error || "signed_upload_failed"));
+        if (signedError || !signedData?.signedUrl || !signedData?.path) {
+          throw new Error(uploadErrorMessage(signedError?.message || signedData?.error || "signed_upload_failed"));
         }
+
+        const signedJson = signedData as { bucket?: string; signedUrl: string; path: string };
 
         const uploaded = await uploadTrainingFile({
           file,
@@ -200,16 +203,6 @@ export default function TrainingEditForm(props: Props) {
           },
           onProgress: (p) => setUploadProgress(p),
         });
-
-        const { error: completeError } = await supabase.from("training_materials").update({
-          file_bucket: "training-files",
-          file_path: uploaded.filePath,
-          file_name: file.name,
-          file_size: file.size,
-          mime_type: uploaded.mimeType,
-          updated_by: user.id,
-        }).eq("id", props.id);
-        if (completeError) throw new Error(uploadErrorMessage(completeError.message || "update_failed"));
       }
 
       router.push(`/training/detail?id=${props.id}`);

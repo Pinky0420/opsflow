@@ -333,10 +333,15 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
       setUploadStep(`取得上傳連結... (id: ${id.slice(0, 8)})`);
 
       const { data: signedData, error: signedError } = await supabase.functions.invoke(
-        `training-upload-url?id=${encodeURIComponent(id)}`,
+        "training-upload-url",
         {
           method: "POST",
-          body: { file_name: file.name, content_type: file.type || "application/octet-stream", file_size: file.size },
+          body: {
+            id,
+            file_name: file.name,
+            content_type: file.type || "application/octet-stream",
+            file_size: file.size,
+          },
         }
       );
       if (signedError || !signedData?.signedUrl || !signedData?.path) {
@@ -345,7 +350,7 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
       const signedJson = signedData as { bucket?: string; signedUrl: string; token?: string; path: string };
 
       setUploadStep("上傳檔案中...");
-      const uploaded = await uploadTrainingFile({
+      await uploadTrainingFile({
         file,
         uploadContentType,
         uploadTarget: {

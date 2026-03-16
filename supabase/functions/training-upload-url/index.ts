@@ -30,11 +30,14 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
 
   const url = new URL(req.url);
-  const id = url.searchParams.get("id") ?? "";
-  if (!id) return new Response(JSON.stringify({ error: "missing_id" }), { status: 400, headers: { ...headers, "Content-Type": "application/json" } });
-
   const token = req.headers.get("authorization")?.replace("Bearer ", "") ?? "";
   if (!token) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...headers, "Content-Type": "application/json" } });
+
+  let body: { id?: string; file_name?: string; content_type?: string; file_size?: number };
+  try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: "invalid_json" }), { status: 400, headers: { ...headers, "Content-Type": "application/json" } }); }
+
+  const id = body.id ?? url.searchParams.get("id") ?? "";
+  if (!id) return new Response(JSON.stringify({ error: "missing_id" }), { status: 400, headers: { ...headers, "Content-Type": "application/json" } });
 
   try {
     const userClient = createSupabaseUserClient(token);
@@ -53,9 +56,6 @@ Deno.serve(async (req: Request) => {
     if (!(isAdmin || isBoss || (isUploader && (material as { uploaded_by?: string }).uploaded_by === user.id))) {
       return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...headers, "Content-Type": "application/json" } });
     }
-
-    let body: { file_name?: string; content_type?: string; file_size?: number };
-    try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: "invalid_json" }), { status: 400, headers: { ...headers, "Content-Type": "application/json" } }); }
 
     if (!body.file_name || typeof body.file_size !== "number") {
       return new Response(JSON.stringify({ error: "missing_fields" }), { status: 400, headers: { ...headers, "Content-Type": "application/json" } });
