@@ -33,7 +33,6 @@ export async function apiFetch(
     .replace(/^admin\/bootstrap$/, "admin-bootstrap")
     .replace(/^training\/([^/]+)\/download-url$/, "training-download-url?id=$1")
     .replace(/^training\/([^/]+)\/upload-url$/, "training-upload-url?id=$1")
-    .replace(/^training\/complete-upload$/, "training-complete-upload")
     .replace(/\//g, "-");
 
   const url = `${API_BASE}/${functionName}`;
@@ -45,12 +44,14 @@ export async function apiFetch(
   const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
   if (anonKey) {
     headers["apikey"] = anonKey;
-    headers["Authorization"] = `Bearer ${anonKey}`;
   }
 
   if (auth) {
     const token = await getBearerToken();
-    if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (!token) {
+      throw new Error("missing_session_access_token");
+    }
+    headers["Authorization"] = `Bearer ${token}`;
   }
 
   return fetch(url, { ...fetchOptions, headers });
