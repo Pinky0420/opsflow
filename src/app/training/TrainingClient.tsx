@@ -147,13 +147,10 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [items, setItems] = useState<TrainingMaterialListItem[]>(initialItems);
-  const didSyncRef = useRef(false);
   useEffect(() => {
-    if (!didSyncRef.current && initialItems.length > 0) {
-      didSyncRef.current = true;
-      setItems(initialItems);
-    }
-  }, [initialItems]);
+    void refreshList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [search, setSearch] = useState("");
   const [contentType, setContentType] = useState("");
   const [visibility, setVisibility] = useState("");
