@@ -306,8 +306,6 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
       const { data: { user }, error: authErr } = await supabase.auth.getUser();
       if (authErr) throw new Error(`auth_error: ${authErr.message}`);
       if (!user) throw new Error("unauthorized");
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error("unauthorized");
 
       const insertBody = {
         title: title.trim(),
@@ -334,29 +332,17 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
       const id = material.id;
       setUploadStep(`取得上傳連結... (id: ${id.slice(0, 8)})`);
 
-      const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim().replace(/\/$/, "");
-      const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
-      if (!apiBase) throw new Error("signed_upload_failed: missing_api_base_url");
-      if (!anonKey) throw new Error("signed_upload_failed: missing_anon_key");
-
-      const signedRes = await fetch(`${apiBase}/training-upload-url?id=${encodeURIComponent(id)}`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          apikey: anonKey,
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          file_name: file.name,
-          content_type: file.type || "application/octet-stream",
-          file_size: file.size,
-        }),
-      });
-
-      const signedJson = (await signedRes.json()) as { bucket?: string; signedUrl?: string; token?: string; path?: string; error?: string };
-      if (!signedRes.ok || !signedJson.signedUrl || !signedJson.path) {
-        throw new Error(`signed_upload_failed: HTTP ${signedRes.status} ${signedJson.error || ""}`);
+      const { data: signedData, error: signedError } = await supabase.functions.invoke(
+        `training-upload-url?id=${encodeURIComponent(id)}`,
+        {
+          method: "POST",
+          body: { file_name: file.name, content_type: file.type || "application/octet-stream", file_size: file.size },
+        }
+      );
+      if (signedError || !signedData?.signedUrl || !signedData?.path) {
+        throw new Error(`signed_upload_failed: ${signedError?.message || signedData?.error || "no_url"}`);
       }
+      const signedJson = signedData as { bucket?: string; signedUrl: string; token?: string; path: string };
 
       setUploadStep("上傳檔案中...");
       const uploaded = await uploadTrainingFile({
