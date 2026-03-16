@@ -150,6 +150,18 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
   useEffect(() => {
     setItems(initialItems);
   }, [initialItems]);
+
+  useEffect(() => {
+    if (mode !== "read") return;
+    void (async () => {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      void refreshList();
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [search, setSearch] = useState("");
   const [contentType, setContentType] = useState("");
   const [visibility, setVisibility] = useState("");
