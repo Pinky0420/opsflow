@@ -147,6 +147,9 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [items, setItems] = useState<TrainingMaterialListItem[]>(initialItems);
+  useEffect(() => {
+    setItems(initialItems);
+  }, [initialItems]);
   const [search, setSearch] = useState("");
   const [contentType, setContentType] = useState("");
   const [visibility, setVisibility] = useState("");
