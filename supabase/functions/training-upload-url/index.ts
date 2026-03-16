@@ -69,7 +69,7 @@ Deno.serve(async (req: Request) => {
     const { data: signed, error: signedError } = await admin.storage.from("training-files").createSignedUploadUrl(objectPath);
     if (signedError || !signed) return new Response(JSON.stringify({ error: "signed_upload_failed" }), { status: 500, headers: { ...headers, "Content-Type": "application/json" } });
 
-    const { error: updateError } = await admin
+    const { data: updatedRows, error: updateError } = await admin
       .from("training_materials")
       .update({
         file_bucket: "training-files",
@@ -79,9 +79,13 @@ Deno.serve(async (req: Request) => {
         mime_type: body.content_type || null,
         updated_by: user.id,
       })
-      .eq("id", id);
+      .eq("id", id)
+      .select("id");
     if (updateError) {
       return new Response(JSON.stringify({ error: updateError.message || "update_failed" }), { status: 500, headers: { ...headers, "Content-Type": "application/json" } });
+    }
+    if (!updatedRows || updatedRows.length === 0) {
+      return new Response(JSON.stringify({ error: "update_no_rows_matched" }), { status: 500, headers: { ...headers, "Content-Type": "application/json" } });
     }
 
     return new Response(JSON.stringify({ bucket: "training-files", path: objectPath, signedUrl: signed.signedUrl, token: signed.token }), {

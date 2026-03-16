@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { uploadTrainingFile } from "@/lib/training/upload-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -147,6 +147,13 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [items, setItems] = useState<TrainingMaterialListItem[]>(initialItems);
+  const didSyncRef = useRef(false);
+  useEffect(() => {
+    if (!didSyncRef.current && initialItems.length > 0) {
+      didSyncRef.current = true;
+      setItems(initialItems);
+    }
+  }, [initialItems]);
   const [search, setSearch] = useState("");
   const [contentType, setContentType] = useState("");
   const [visibility, setVisibility] = useState("");
