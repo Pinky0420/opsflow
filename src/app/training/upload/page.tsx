@@ -72,7 +72,7 @@ export default function TrainingUploadPage() {
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
       <AppHeader subtitle="教育訓練資料" role={profile.role} />
 
-      <main className="mx-auto w-full max-w-6xl space-y-4 px-3 py-4 sm:space-y-6 sm:px-4 sm:py-6 md:pl-[19rem] md:pr-6 md:py-8">
+      <main className="mx-auto w-full max-w-6xl space-y-4 px-3 py-4 sm:space-y-6 sm:px-4 sm:py-6 md:pr-6 md:py-8" style={{ paddingLeft: "var(--app-sidebar-offset, 0px)" }}>
         <TrainingNav />
 
         {loaded ? (

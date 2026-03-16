@@ -174,6 +174,8 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  const renderedItems = mode === "read" && items.length === 0 && initialItems.length > 0 ? initialItems : items;
+
   const selectedDepartmentNames = useMemo(() => {
     const byId = new Map(departments.map((d) => [d.id, d.name] as const));
     return selectedDepartments.map((id) => byId.get(id)).filter(Boolean).join(", ");
@@ -460,8 +462,8 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
-                checked={items.length > 0 && selectedIds.length === items.length}
-                onChange={(e) => setSelectedIds(e.target.checked ? items.map((x) => x.id) : [])}
+                checked={renderedItems.length > 0 && selectedIds.length === renderedItems.length}
+                onChange={(e) => setSelectedIds(e.target.checked ? renderedItems.map((x) => x.id) : [])}
               />
               <span>全選</span>
             </label>
@@ -481,10 +483,10 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
         ) : null}
 
         <div className="mt-4 space-y-3 md:hidden">
-          {items.length === 0 ? (
+          {renderedItems.length === 0 ? (
             <div className="rounded-lg border px-3 py-6 text-sm text-zinc-600">目前沒有資料</div>
           ) : (
-            items.map((m) => (
+            renderedItems.map((m) => (
               <div key={m.id} className="rounded-lg border bg-white px-3 py-3 text-sm shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -558,10 +560,10 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
             {canManage ? <div className="col-span-2 text-right">管理</div> : null}
           </div>
           <div className="divide-y">
-            {items.length === 0 ? (
+            {renderedItems.length === 0 ? (
               <div className="px-3 py-6 text-sm text-zinc-600">目前沒有資料</div>
             ) : (
-              items.map((m) => (
+              renderedItems.map((m) => (
                 <div key={m.id} className="grid grid-cols-12 items-center px-3 py-3 text-sm">
                   {canManage ? (
                     <div className="col-span-1">

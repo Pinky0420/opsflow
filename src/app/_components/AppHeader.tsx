@@ -139,6 +139,7 @@ function NavigationContent({ pathname, onNavigate, role, onSignOut }: { pathname
 
 export default function AppHeader({ subtitle, role }: Props) {
   const [open, setOpen] = useState(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const pathname = stripAppBasePath(usePathname());
   const router = useRouter();
@@ -149,6 +150,28 @@ export default function AppHeader({ subtitle, role }: Props) {
     router.push("/login");
     router.refresh();
   }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("opsflow.desktopSidebarOpen");
+    if (stored === "0") setDesktopSidebarOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function syncSidebarOffset() {
+      const isDesktop = window.innerWidth >= 768;
+      document.documentElement.style.setProperty("--app-sidebar-offset", isDesktop && desktopSidebarOpen ? "19rem" : "0px");
+    }
+
+    window.localStorage.setItem("opsflow.desktopSidebarOpen", desktopSidebarOpen ? "1" : "0");
+    syncSidebarOffset();
+    window.addEventListener("resize", syncSidebarOffset);
+    return () => {
+      window.removeEventListener("resize", syncSidebarOffset);
+    };
+  }, [desktopSidebarOpen]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -174,7 +197,17 @@ export default function AppHeader({ subtitle, role }: Props) {
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r bg-white md:flex md:flex-col">
+      <button
+        type="button"
+        onClick={() => setDesktopSidebarOpen((value) => !value)}
+        className="fixed left-3 top-3 z-50 hidden h-10 w-10 items-center justify-center rounded-lg border bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 md:inline-flex"
+        aria-label={desktopSidebarOpen ? "收起側邊欄" : "展開側邊欄"}
+        aria-expanded={desktopSidebarOpen}
+      >
+        <MenuIcon />
+      </button>
+
+      <aside className={`fixed inset-y-0 left-0 z-40 hidden w-72 border-r bg-white transition-transform duration-300 md:flex md:flex-col ${desktopSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="border-b px-5 py-4">
           <Link href="/" className="text-lg font-semibold hover:opacity-80" onClick={() => setOpen(false)}>
             OpsFlow
