@@ -445,6 +445,10 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
           </button>
         </div>
 
+        <div className="mt-3 text-xs text-zinc-500">
+          initialItems: {initialItems.length} / items: {items.length} / rendered: {renderedItems.length}
+        </div>
+
         {listError ? (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {listError}
