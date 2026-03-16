@@ -27,9 +27,11 @@ type RawItem = {
 
 export default function TrainingUploadPage() {
   const session = useSession({ redirectTo: "/training/upload", requiredRole: ["admin", "boss", "uploader"] });
-  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
-  const [items, setItems] = useState<(RawItem & { uploader: { account_id: string | null; display_name: string | null } | null; editor: { account_id: string | null; display_name: string | null } | null })[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [pageState, setPageState] = useState<{
+    departments: { id: string; name: string }[];
+    items: (RawItem & { uploader: { account_id: string | null; display_name: string | null } | null; editor: { account_id: string | null; display_name: string | null } | null })[];
+    loaded: boolean;
+  }>({ departments: [], items: [], loaded: false });
 
   useEffect(() => {
     if (session.status !== "ready") return;
@@ -44,7 +46,7 @@ export default function TrainingUploadPage() {
           .order("created_at", { ascending: false }).limit(50),
       ]);
 
-      setDepartments(deptResult.data ?? []);
+      const depts = deptResult.data ?? [];
       const raw = (itemResult.data ?? []) as RawItem[];
       const profileIds = Array.from(new Set(raw.flatMap((i) => [i.uploaded_by, i.updated_by]).filter(Boolean))) as string[];
       let peopleById = new Map<string, { account_id: string | null; display_name: string | null }>();
@@ -54,12 +56,15 @@ export default function TrainingUploadPage() {
         peopleById = new Map((people ?? []).map((p) => [p.id, { account_id: p.account_id, display_name: p.display_name }] as const));
       }
 
-      setItems(raw.map((item) => ({
-        ...item,
-        uploader: item.uploaded_by ? peopleById.get(item.uploaded_by) ?? null : null,
-        editor: item.updated_by ? peopleById.get(item.updated_by) ?? null : null,
-      })));
-      setLoaded(true);
+      setPageState({
+        departments: depts,
+        items: raw.map((item) => ({
+          ...item,
+          uploader: item.uploaded_by ? peopleById.get(item.uploaded_by) ?? null : null,
+          editor: item.updated_by ? peopleById.get(item.updated_by) ?? null : null,
+        })),
+        loaded: true,
+      });
     }
 
     void load();
@@ -75,11 +80,11 @@ export default function TrainingUploadPage() {
       <main className="mx-auto w-full max-w-6xl space-y-4 px-3 py-4 sm:space-y-6 sm:px-4 sm:py-6 md:pr-6 md:py-8" style={{ paddingLeft: "var(--app-sidebar-offset, 0px)" }}>
         <TrainingNav />
 
-        {loaded ? (
+        {pageState.loaded ? (
           <TrainingClient
             role={profile.role}
-            departments={departments}
-            initialItems={items}
+            departments={pageState.departments}
+            initialItems={pageState.items}
             mode="upload"
             currentUploaderName={profile.display_name || user.email || "未知使用者"}
           />

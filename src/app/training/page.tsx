@@ -17,9 +17,11 @@ type RawItem = {
 
 export default function TrainingPage() {
   const session = useSession({ redirectTo: "/training" });
-  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
-  const [items, setItems] = useState<(RawItem & { uploader: { account_id: string | null; display_name: string | null } | null; editor: { account_id: string | null; display_name: string | null } | null })[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [pageState, setPageState] = useState<{
+    departments: { id: string; name: string }[];
+    items: (RawItem & { uploader: { account_id: string | null; display_name: string | null } | null; editor: { account_id: string | null; display_name: string | null } | null })[];
+    loaded: boolean;
+  }>({ departments: [], items: [], loaded: false });
 
   useEffect(() => {
     if (session.status !== "ready") return;
@@ -34,7 +36,7 @@ export default function TrainingPage() {
           .order("created_at", { ascending: false }).limit(50),
       ]);
 
-      setDepartments(deptResult.data ?? []);
+      const depts = deptResult.data ?? [];
       const raw = (itemResult.data ?? []) as RawItem[];
       const profileIds = Array.from(new Set(raw.flatMap((i) => [i.uploaded_by, i.updated_by]).filter(Boolean))) as string[];
       let peopleById = new Map<string, { account_id: string | null; display_name: string | null }>();
@@ -44,12 +46,15 @@ export default function TrainingPage() {
         peopleById = new Map((people ?? []).map((p) => [p.id, { account_id: p.account_id, display_name: p.display_name }] as const));
       }
 
-      setItems(raw.map((item) => ({
-        ...item,
-        uploader: item.uploaded_by ? peopleById.get(item.uploaded_by) ?? null : null,
-        editor: item.updated_by ? peopleById.get(item.updated_by) ?? null : null,
-      })));
-      setLoaded(true);
+      setPageState({
+        departments: depts,
+        items: raw.map((item) => ({
+          ...item,
+          uploader: item.uploaded_by ? peopleById.get(item.uploaded_by) ?? null : null,
+          editor: item.updated_by ? peopleById.get(item.updated_by) ?? null : null,
+        })),
+        loaded: true,
+      });
     }
 
     void load();
@@ -71,11 +76,11 @@ export default function TrainingPage() {
           <div className="mt-1 text-sm text-zinc-600">role: {profile.role || "(no profile)"}</div>
         </section>
 
-        {loaded ? (
+        {pageState.loaded ? (
           <TrainingClient
             role={profile.role}
-            departments={departments}
-            initialItems={items}
+            departments={pageState.departments}
+            initialItems={pageState.items}
             mode="read"
           />
         ) : (
