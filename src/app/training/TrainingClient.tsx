@@ -147,10 +147,6 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [items, setItems] = useState<TrainingMaterialListItem[]>(initialItems);
-  useEffect(() => {
-    void refreshList();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const [search, setSearch] = useState("");
   const [contentType, setContentType] = useState("");
   const [visibility, setVisibility] = useState("");
@@ -394,9 +390,9 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
     <div className="space-y-6">
       {mode === "read" ? (
         <section className="rounded-xl border bg-white p-4 shadow-sm sm:p-6">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_180px_180px_auto] md:items-end">
-          <div className="min-w-0">
-            <label className="text-sm font-medium">搜尋</label>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="min-w-0 flex-1 sm:min-w-[180px]">
+            <label className="block text-sm font-medium">搜尋</label>
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -404,8 +400,8 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
               placeholder="標題 / 描述 / 關鍵字"
             />
           </div>
-          <div className="w-full md:w-auto">
-            <label className="text-sm font-medium">類型</label>
+          <div className="w-full sm:w-40">
+            <label className="block text-sm font-medium">類型</label>
             <select
               value={contentType}
               onChange={(e) => setContentType(e.target.value)}
@@ -419,8 +415,8 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
               ))}
             </select>
           </div>
-          <div className="w-full md:w-auto">
-            <label className="text-sm font-medium">可見度</label>
+          <div className="w-full sm:w-40">
+            <label className="block text-sm font-medium">可見度</label>
             <select
               value={visibility}
               onChange={(e) => setVisibility(e.target.value)}
@@ -438,7 +434,7 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
             type="button"
             onClick={refreshList}
             disabled={loading}
-            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 md:w-auto"
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 sm:w-auto"
           >
             {loading ? "載入中..." : "搜尋"}
           </button>
