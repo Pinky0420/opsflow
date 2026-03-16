@@ -7,13 +7,62 @@ import TrainingNav from "../TrainingNav";
 import { useSession } from "@/lib/useSession";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
+type RawItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  content_type: string;
+  visibility: string;
+  keywords: string;
+  file_name: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  file_path: string | null;
+  uploaded_by: string | null;
+  updated_by: string | null;
+};
+
 export default function TrainingUploadPage() {
   const session = useSession({ redirectTo: "/training/upload", requiredRole: ["admin", "boss", "uploader"] });
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [items, setItems] = useState<(RawItem & { uploader: { account_id: string | null; display_name: string | null } | null; editor: { account_id: string | null; display_name: string | null } | null })[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (session.status !== "ready") return;
-    createSupabaseBrowserClient().from("departments").select("id, name").order("name").then(({ data }) => setDepartments(data ?? []));
+    const supabase = createSupabaseBrowserClient();
+
+    async function load() {
+      const [deptResult, itemResult] = await Promise.all([
+        supabase.from("departments").select("id, name").order("name"),
+        supabase.from("training_materials")
+          .select("id, title, description, content_type, visibility, keywords, file_name, file_size, mime_type, status, created_at, updated_at, file_path, uploaded_by, updated_by")
+          .eq("status", "active").not("file_path", "is", null).not("file_name", "is", null)
+          .order("created_at", { ascending: false }).limit(50),
+      ]);
+
+      setDepartments(deptResult.data ?? []);
+      const raw = (itemResult.data ?? []) as RawItem[];
+      const profileIds = Array.from(new Set(raw.flatMap((i) => [i.uploaded_by, i.updated_by]).filter(Boolean))) as string[];
+      let peopleById = new Map<string, { account_id: string | null; display_name: string | null }>();
+
+      if (profileIds.length > 0) {
+        const { data: people } = await supabase.from("profiles").select("id, account_id, display_name").in("id", profileIds);
+        peopleById = new Map((people ?? []).map((p) => [p.id, { account_id: p.account_id, display_name: p.display_name }] as const));
+      }
+
+      setItems(raw.map((item) => ({
+        ...item,
+        uploader: item.uploaded_by ? peopleById.get(item.uploaded_by) ?? null : null,
+        editor: item.updated_by ? peopleById.get(item.updated_by) ?? null : null,
+      })));
+      setLoaded(true);
+    }
+
+    void load();
   }, [session.status]);
 
   if (session.status !== "ready") return <div className="min-h-screen bg-zinc-50" />;
@@ -29,7 +78,7 @@ export default function TrainingUploadPage() {
         <TrainingClient
           role={profile.role}
           departments={departments}
-          initialItems={[]}
+          initialItems={loaded ? items : []}
           mode="upload"
           currentUploaderName={profile.display_name || user.email || "未知使用者"}
         />
