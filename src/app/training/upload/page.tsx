@@ -75,13 +75,17 @@ export default function TrainingUploadPage() {
       <main className="mx-auto w-full max-w-6xl space-y-4 px-3 py-4 sm:space-y-6 sm:px-4 sm:py-6 md:pl-[19rem] md:pr-6 md:py-8">
         <TrainingNav />
 
-        <TrainingClient
-          role={profile.role}
-          departments={departments}
-          initialItems={loaded ? items : []}
-          mode="upload"
-          currentUploaderName={profile.display_name || user.email || "未知使用者"}
-        />
+        {loaded ? (
+          <TrainingClient
+            role={profile.role}
+            departments={departments}
+            initialItems={items}
+            mode="upload"
+            currentUploaderName={profile.display_name || user.email || "未知使用者"}
+          />
+        ) : (
+          <div className="rounded-xl border bg-white p-6 text-sm text-zinc-500">載入中...</div>
+        )}
       </main>
     </div>
   );

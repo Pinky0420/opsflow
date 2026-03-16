@@ -71,12 +71,16 @@ export default function TrainingPage() {
           <div className="mt-1 text-sm text-zinc-600">role: {profile.role || "(no profile)"}</div>
         </section>
 
-        <TrainingClient
-          role={profile.role}
-          departments={departments}
-          initialItems={loaded ? items : []}
-          mode="read"
-        />
+        {loaded ? (
+          <TrainingClient
+            role={profile.role}
+            departments={departments}
+            initialItems={items}
+            mode="read"
+          />
+        ) : (
+          <div className="rounded-xl border bg-white p-6 text-sm text-zinc-500">載入中...</div>
+        )}
       </main>
     </div>
   );
