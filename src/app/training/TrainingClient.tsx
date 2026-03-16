@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { uploadTrainingFile } from "@/lib/training/upload-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { apiFetch } from "@/lib/api";
 
 type Department = {
   id: string;
@@ -335,12 +334,24 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
       const id = material.id;
       setUploadStep(`取得上傳連結... (id: ${id.slice(0, 8)})`);
 
-      const signedRes = await apiFetch(`/api/training/${id}/upload-url`, {
+      const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim().replace(/\/$/, "");
+      const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
+      if (!apiBase) throw new Error("signed_upload_failed: missing_api_base_url");
+      if (!anonKey) throw new Error("signed_upload_failed: missing_anon_key");
+
+      const signedRes = await fetch(`${apiBase}/training-upload-url?id=${encodeURIComponent(id)}`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        auth: true,
-        body: JSON.stringify({ file_name: file.name, content_type: file.type || "application/octet-stream", file_size: file.size }),
-      } as Parameters<typeof apiFetch>[1]);
+        headers: {
+          "content-type": "application/json",
+          apikey: anonKey,
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          file_name: file.name,
+          content_type: file.type || "application/octet-stream",
+          file_size: file.size,
+        }),
+      });
 
       const signedJson = (await signedRes.json()) as { bucket?: string; signedUrl?: string; token?: string; path?: string; error?: string };
       if (!signedRes.ok || !signedJson.signedUrl || !signedJson.path) {
