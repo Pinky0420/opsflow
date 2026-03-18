@@ -43,6 +43,15 @@ Deno.serve(async (req: Request) => {
       if (!ok) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...headers, "Content-Type": "application/json" } });
     }
 
+    if (material.file_bucket === "google-drive") {
+      const fileId = material.file_path;
+      const viewUrl = `https://drive.google.com/file/d/${fileId}/view`;
+      const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+      return new Response(JSON.stringify({ signedUrl: viewUrl, downloadUrl }), {
+        headers: { ...headers, "Content-Type": "application/json" },
+      });
+    }
+
     const { data, error } = await admin.storage.from(material.file_bucket).createSignedUrl(material.file_path, 60);
     if (error || !data) {
       return new Response(JSON.stringify({ error: error?.message || "signed_download_failed" }), { status: 500, headers: { ...headers, "Content-Type": "application/json" } });

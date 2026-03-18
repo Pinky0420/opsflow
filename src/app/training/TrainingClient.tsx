@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { uploadTrainingFile } from "@/lib/training/upload-client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Department = {
@@ -316,68 +315,44 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
     }
 
     setUploading(true);
-    setUploadProgress(0);
+    setUploadProgress(10);
     setUploadStep("驗證身份...");
     try {
       const supabase = createSupabaseBrowserClient();
-      const { data: { user }, error: authErr } = await supabase.auth.getUser();
+      const { data: { session }, error: authErr } = await supabase.auth.getSession();
       if (authErr) throw new Error(`auth_error: ${authErr.message}`);
-      if (!user) throw new Error("unauthorized");
+      if (!session) throw new Error("unauthorized");
 
-      const insertBody = {
+      const meta = {
         title: title.trim(),
-        description: description.trim() ? description.trim() : null,
+        description: description.trim() || undefined,
         content_type: uploadContentType,
         visibility: uploadVisibility,
         keywords: keywordTags.join(","),
-        file_name: file.name,
-        file_size: file.size,
-        mime_type: file.type || "application/octet-stream",
-        uploaded_by: user.id,
-        status: "active",
+        departments: uploadVisibility === "department" ? selectedDepartments : [],
       };
 
-      setUploadStep("建立教材記錄...");
-      const { data: material, error: insertError } = await supabase.from("training_materials").insert(insertBody).select("id").single();
-      if (insertError || !material) throw new Error(`create_failed: ${insertError?.message || insertError?.code || "no data returned"}`);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("meta", JSON.stringify(meta));
 
-      const deptIds = uploadVisibility === "department" ? selectedDepartments : [];
-      if (deptIds.length > 0) {
-        await supabase.from("training_material_departments").insert(deptIds.map((department_id) => ({ material_id: material.id, department_id })));
-      }
+      setUploadStep("上傳至 Google Drive 中...");
+      setUploadProgress(30);
 
-      const id = material.id;
-      setUploadStep(`取得上傳連結... (id: ${id.slice(0, 8)})`);
-
-      const { data: signedData, error: signedError } = await supabase.functions.invoke(
-        "training-upload-url",
-        {
-          method: "POST",
-          body: {
-            id,
-            file_name: file.name,
-            content_type: file.type || "application/octet-stream",
-            file_size: file.size,
-          },
-        }
-      );
-      if (signedError || !signedData?.signedUrl || !signedData?.path) {
-        throw new Error(`signed_upload_failed: ${signedError?.message || signedData?.error || "no_url"}`);
-      }
-      const signedJson = signedData as { bucket?: string; signedUrl: string; token?: string; path: string };
-
-      setUploadStep("上傳檔案中...");
-      await uploadTrainingFile({
-        file,
-        uploadContentType,
-        uploadTarget: {
-          bucket: signedJson.bucket || "training-files",
-          objectPath: signedJson.path,
-          signedUrl: signedJson.signedUrl,
-        },
-        onProgress: (p) => setUploadProgress(p),
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const res = await fetch(`${supabaseUrl}/functions/v1/training-upload-drive`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: formData,
       });
 
+      setUploadProgress(90);
+      const json = await res.json() as { id?: string; driveFileId?: string; error?: string };
+      if (!res.ok || !json.id) {
+        throw new Error(`upload_failed: ${json.error ?? res.statusText}`);
+      }
+
+      const id = json.id;
       setUploadOk(id);
       setUploadStep(null);
       setTitle("");
