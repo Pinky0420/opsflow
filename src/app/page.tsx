@@ -22,6 +22,16 @@ export default function Home() {
           <div className="mt-1 text-lg font-semibold">{profile.display_name || user.email}</div>
         </section>
 
+        {(profile.role === "admin" || profile.role === "boss") && (
+          <a href="/derex" className="flex items-center gap-3 rounded-xl border border-zinc-300 bg-white px-5 py-4 shadow-sm hover:bg-zinc-50">
+            <span className="text-lg">📋</span>
+            <div>
+              <div className="text-sm font-semibold">DerexPage 決策中心</div>
+              <div className="mt-0.5 text-xs text-zinc-500">Notion → AI 摘要 → 老闆回覆</div>
+            </div>
+          </a>
+        )}
+
         <section className="rounded-xl border bg-white p-6 shadow-sm">
           <h2 className="text-base font-semibold">工作區</h2>
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
