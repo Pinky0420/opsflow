@@ -10,6 +10,7 @@ import { db } from "@/lib/firebase/client";
 
 type DerexCard = {
   id: string;
+  message_id: string;
   status: boolean;
   priority: 1 | 2 | 3 | 4 | 5;
   card_title: string;
@@ -17,8 +18,10 @@ type DerexCard = {
   boss_reply: string;
   dept_tags: string[];
   department: string;
+  media_url: string[];
   update_at: string;
   created_at: string;
+  finish_time?: string;
   source: string;
   notion_page_id?: string;
 };
@@ -33,8 +36,13 @@ const PRIORITY_CONFIG: Record<number, { label: string; dot: string; border: stri
   5: { label: "緊急", dot: "bg-red-500 animate-pulse", border: "border-red-200", badge: "bg-red-50 text-red-700" },
 };
 
+function makeMsgId(dept: string) {
+  return `MSG-${dept.slice(0, 2)}-${Date.now().toString(36).toUpperCase()}`;
+}
+
 const MOCK_CARDS: Omit<DerexCard, "id">[] = [
   {
+    message_id: makeMsgId("設計"),
     status: false,
     priority: 5,
     card_title: "設計部：噴繪樣版已變更，請確認",
@@ -42,11 +50,16 @@ const MOCK_CARDS: Omit<DerexCard, "id">[] = [
     boss_reply: "",
     dept_tags: ["設計部門", "展覽活動"],
     department: "設計部門",
+    media_url: [
+      "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80",
+      "https://images.unsplash.com/photo-1541961017774-22349e4a1262?w=600&q=80",
+    ],
     update_at: new Date().toISOString(),
     created_at: new Date().toISOString(),
     source: "mock",
   },
   {
+    message_id: makeMsgId("商品"),
     status: false,
     priority: 4,
     card_title: "商品部：週邊SOP備貨量請決策",
@@ -54,11 +67,13 @@ const MOCK_CARDS: Omit<DerexCard, "id">[] = [
     boss_reply: "",
     dept_tags: ["商品管理"],
     department: "商品管理",
+    media_url: [],
     update_at: new Date().toISOString(),
     created_at: new Date().toISOString(),
     source: "mock",
   },
   {
+    message_id: makeMsgId("行銷"),
     status: false,
     priority: 3,
     card_title: "行銷：三月活動預算使用率 68%",
@@ -66,11 +81,13 @@ const MOCK_CARDS: Omit<DerexCard, "id">[] = [
     boss_reply: "",
     dept_tags: ["行銷企劃"],
     department: "行銷企劃",
+    media_url: [],
     update_at: new Date().toISOString(),
     created_at: new Date().toISOString(),
     source: "mock",
   },
   {
+    message_id: makeMsgId("展覽"),
     status: false,
     priority: 2,
     card_title: "展覽活動：4月場地確認，待簽約",
@@ -78,11 +95,13 @@ const MOCK_CARDS: Omit<DerexCard, "id">[] = [
     boss_reply: "",
     dept_tags: ["展覽活動", "行政管理"],
     department: "展覽活動",
+    media_url: ["https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&q=80"],
     update_at: new Date().toISOString(),
     created_at: new Date().toISOString(),
     source: "mock",
   },
   {
+    message_id: makeMsgId("社群"),
     status: true,
     priority: 3,
     card_title: "社群：三月IG發文排程已確認",
@@ -90,8 +109,10 @@ const MOCK_CARDS: Omit<DerexCard, "id">[] = [
     boss_reply: "好的，照計劃走，四月排程下週給我看。",
     dept_tags: ["社群媒體"],
     department: "社群媒體",
+    media_url: [],
     update_at: new Date(Date.now() - 86400000).toISOString(),
     created_at: new Date(Date.now() - 86400000).toISOString(),
+    finish_time: new Date(Date.now() - 86400000).toISOString(),
     source: "mock",
   },
 ];
@@ -135,6 +156,28 @@ type CardProps = {
   card: DerexCard;
   onSubmitReply: (id: string, reply: string, deptTags: string[]) => Promise<void>;
 };
+
+function MediaPreview({ urls }: { urls: string[] }) {
+  if (!urls.length) return null;
+  return (
+    <div className="mt-3">
+      <div className="text-xs font-medium text-zinc-500">附件媒體（{urls.length}）</div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {urls.map((url, i) => (
+          <a key={i} href={url} target="_blank" rel="noreferrer" className="group relative block overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100">
+            {url.match(/\.(mp4|mov|webm)$/i) ? (
+              <div className="flex h-20 w-32 items-center justify-center text-zinc-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </div>
+            ) : (
+              <img src={url} alt={`附件 ${i + 1}`} className="h-20 w-32 object-cover transition-opacity group-hover:opacity-80" />
+            )}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function DerexCardItem({ card, onSubmitReply }: CardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -181,6 +224,8 @@ function DerexCardItem({ card, onSubmitReply }: CardProps) {
           <div className="flex flex-wrap gap-1.5">
             {card.dept_tags.map((t) => <DeptTag key={t} name={t} />)}
           </div>
+
+          <MediaPreview urls={card.media_url ?? []} />
 
           <div className="mt-3 rounded-lg bg-zinc-50 p-3">
             {formatDetail(card.card_detail)}
@@ -249,9 +294,17 @@ function DerexCardItem({ card, onSubmitReply }: CardProps) {
             </div>
           ) : null}
 
-          <div className="mt-3 text-right text-xs text-zinc-400">
-            {new Date(card.update_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
-            {card.source === "mock" && <span className="ml-2 rounded bg-zinc-100 px-1 text-zinc-400">mock</span>}
+          <div className="mt-3 flex items-center justify-between text-xs text-zinc-400">
+            <span className="font-mono">{card.message_id}</span>
+            <div className="flex items-center gap-2">
+              {card.finish_time && (
+                <span>完成：{new Date(card.finish_time).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}</span>
+              )}
+              {!card.finish_time && (
+                <span>更新：{new Date(card.update_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}</span>
+              )}
+              {card.source === "mock" && <span className="rounded bg-zinc-100 px-1">mock</span>}
+            </div>
           </div>
         </div>
       )}
@@ -291,15 +344,17 @@ export default function DerexPage() {
   }
 
   async function onSubmitReply(id: string, reply: string, deptTags: string[]) {
+    const now = new Date().toISOString();
     await updateDoc(doc(db, "derex_cards", id), {
       boss_reply: reply,
       dept_tags: deptTags,
       status: true,
-      update_at: new Date().toISOString(),
+      update_at: now,
+      finish_time: now,
     });
     setCards((prev) =>
       prev.map((c) =>
-        c.id === id ? { ...c, boss_reply: reply, dept_tags: deptTags, status: true, update_at: new Date().toISOString() } : c
+        c.id === id ? { ...c, boss_reply: reply, dept_tags: deptTags, status: true, update_at: now, finish_time: now } : c
       )
     );
   }

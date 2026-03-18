@@ -68,5 +68,13 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAdminOrBoss();
     }
+
+    // DerexPage decision cards (boss/admin only)
+    match /derex_cards/{cardId} {
+      allow read: if isAdminOrBoss();
+      allow create: if isAdmin();
+      allow update: if isAdminOrBoss();
+      allow delete: if isAdmin();
+    }
   }
 }
