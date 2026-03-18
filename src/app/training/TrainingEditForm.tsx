@@ -2,8 +2,8 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { uploadTrainingFile } from "@/lib/training/upload-client";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { doc, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc } from "firebase/firestore";
+import { db, firebaseAuth } from "@/lib/firebase/client";
 
 type Department = {
   id: string;
@@ -149,60 +149,46 @@ export default function TrainingEditForm(props: Props) {
 
     setLoading(true);
     try {
-      const supabase = createSupabaseBrowserClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = firebaseAuth.currentUser;
       if (!user) throw new Error(saveErrorMessage("unauthorized"));
 
-      const { error: updateError } = await supabase.from("training_materials").update({
+      await updateDoc(doc(db, "training_materials", props.id), {
         title: title.trim(),
         description: description.trim() || null,
         content_type: contentType,
         visibility,
         keywords: keywordTags.join(","),
-        updated_by: user.id,
-      }).eq("id", props.id).eq("status", "active");
-      if (updateError) throw new Error(saveErrorMessage(updateError.message || "update_failed"));
+        updated_by: user.uid,
+        updated_at: new Date().toISOString(),
+      });
 
-      await supabase.from("training_material_departments").delete().eq("material_id", props.id);
+      const existingDeptSnap = await getDocs(query(collection(db, "training_material_departments"), where("material_id", "==", props.id)));
+      await Promise.all(existingDeptSnap.docs.map((d) => deleteDoc(d.ref)));
       const deptIds = visibility === "department" ? selectedDepartments : [];
       if (deptIds.length > 0) {
-        await supabase.from("training_material_departments").insert(deptIds.map((department_id) => ({ material_id: props.id, department_id })));
+        await Promise.all(deptIds.map((department_id) => addDoc(collection(db, "training_material_departments"), { material_id: props.id, department_id })));
       }
 
       if (file) {
         const fileValidationError = validateFileForUpload(file);
-        if (fileValidationError) {
-          throw new Error(uploadErrorMessage(fileValidationError));
-        }
+        if (fileValidationError) throw new Error(uploadErrorMessage(fileValidationError));
 
-        setUploadProgress(0);
+        setUploadProgress(20);
+        const session = await user.getIdToken();
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("meta", JSON.stringify({ id: props.id, replace: true }));
 
-        const { data: signedData, error: signedError } = await supabase.functions.invoke("training-upload-url", {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const res = await fetch(`${supabaseUrl}/functions/v1/training-upload-drive`, {
           method: "POST",
-          body: {
-            id: props.id,
-            file_name: file.name,
-            content_type: file.type || "application/octet-stream",
-            file_size: file.size,
-          },
+          headers: { Authorization: `Bearer ${session}` },
+          body: formData,
         });
-
-        if (signedError || !signedData?.signedUrl || !signedData?.path) {
-          throw new Error(uploadErrorMessage(signedError?.message || signedData?.error || "signed_upload_failed"));
-        }
-
-        const signedJson = signedData as { bucket?: string; signedUrl: string; path: string };
-
-        const uploaded = await uploadTrainingFile({
-          file,
-          uploadContentType: contentType,
-          uploadTarget: {
-            bucket: signedJson.bucket || "training-files",
-            objectPath: signedJson.path,
-            signedUrl: signedJson.signedUrl,
-          },
-          onProgress: (p) => setUploadProgress(p),
-        });
+        setUploadProgress(90);
+        const json = await res.json() as { error?: string };
+        if (!res.ok) throw new Error(uploadErrorMessage(json.error ?? "upload_failed"));
+        setUploadProgress(100);
       }
 
       router.push(`/training/detail?id=${props.id}`);

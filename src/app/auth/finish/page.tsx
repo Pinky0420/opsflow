@@ -2,8 +2,9 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { apiFetch } from "@/lib/api";
+import { isSignInWithEmailLink, signInWithEmailLink } from "firebase/auth";
+import { firebaseAuth } from "@/lib/firebase/client";
+import { appPath } from "@/lib/appPath";
 
 function AuthFinishContent() {
   const router = useRouter();
@@ -18,55 +19,28 @@ function AuthFinishContent() {
       const redirectTo = next && next.startsWith("/") ? next : "/training";
 
       try {
-        const supabase = createSupabaseBrowserClient();
-
-        const hash = typeof window !== "undefined" ? window.location.hash.replace(/^#/, "") : "";
-        const hashParams = new URLSearchParams(hash);
-        const accessToken = hashParams.get("access_token");
-        const refreshToken = hashParams.get("refresh_token");
-        const code = searchParams.get("code");
-
-        if (accessToken && refreshToken) {
-          const { error: setSessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (setSessionError) {
-            setError(setSessionError.message);
-            return;
-          }
-        } else if (code) {
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-          if (exchangeError) {
-            setError(exchangeError.message);
-            return;
-          }
-        } else {
-          setError("missing_session");
+        if (!isSignInWithEmailLink(firebaseAuth, window.location.href)) {
+          setError("無效的登入連結，請重新索取。");
           return;
         }
 
-        const syncResp = await apiFetch("/api/auth/sync-profile", { method: "POST", auth: true });
-        const syncPayload = (await syncResp.json()) as { error?: string; require_password_setup?: boolean };
-        if (!syncResp.ok) {
-          setError(syncPayload.error ?? "sync_failed");
+        const savedEmail = window.localStorage.getItem("emailForSignIn") ?? "";
+        const emailToUse = savedEmail || (window.prompt("請輸入你的 Email 以完成登入：") ?? "");
+        if (!emailToUse) {
+          setError("請輸入 Email 才能完成登入。");
           return;
         }
 
-        if (syncPayload.require_password_setup) {
-          if (!cancelled) {
-            router.replace(`/auth/setup-password?next=${encodeURIComponent(redirectTo)}`);
-            router.refresh();
-          }
-          return;
-        }
+        await signInWithEmailLink(firebaseAuth, emailToUse, window.location.href);
+        window.localStorage.removeItem("emailForSignIn");
 
         if (!cancelled) {
-          router.replace(redirectTo);
-          router.refresh();
+          window.location.assign(appPath(redirectTo));
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "finish_failed");
+        if (!cancelled) {
+          setError((err as { message?: string })?.message ?? "finish_failed");
+        }
       }
     }
 

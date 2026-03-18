@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { signOut } from "firebase/auth";
+import { firebaseAuth } from "@/lib/firebase/client";
 import { stripAppBasePath } from "@/lib/appPath";
 
 type Props = {
@@ -145,8 +146,7 @@ export default function AppHeader({ subtitle, role }: Props) {
   const router = useRouter();
 
   async function handleSignOut() {
-    const supabase = createSupabaseBrowserClient();
-    await supabase.auth.signOut();
+    await signOut(firebaseAuth);
     router.push("/login");
     router.refresh();
   }

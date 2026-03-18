@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userRole() == 'admin';
+    }
+
+    function isAdminOrBoss() {
+      return isSignedIn() && userRole() in ['admin', 'boss'];
+    }
+
+    function isUploader() {
+      return isSignedIn() && userRole() in ['admin', 'boss', 'uploader'];
+    }
+
+    // Users collection (profiles)
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+      // Allow user to read their own document always
+      allow read: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Departments
+    match /departments/{departmentId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Training materials
+    match /training_materials/{materialId} {
+      allow read: if isSignedIn();
+      allow create: if isUploader();
+      allow update: if isAdminOrBoss();
+      allow delete: if isAdmin();
+    }
+
+    // Training material department associations
+    match /training_material_departments/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrBoss();
+    }
+
+    // Replies (boss voice replies)
+    match /replies/{replyId} {
+      allow read: if isAdminOrBoss();
+      allow create: if isAdminOrBoss();
+      allow update, delete: if isAdmin();
+    }
+
+    // Decisions
+    match /decisions/{decisionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrBoss();
+    }
+
+    // Todos
+    match /todos/{todoId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrBoss();
+    }
+  }
+}

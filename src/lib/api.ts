@@ -1,12 +1,12 @@
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { firebaseAuth } from "@/lib/firebase/client";
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim().replace(/\/$/, "");
 
 async function getBearerToken(): Promise<string | null> {
   try {
-    const supabase = createSupabaseBrowserClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token ?? null;
+    const user = firebaseAuth.currentUser;
+    if (!user) return null;
+    return await user.getIdToken();
   } catch {
     return null;
   }
@@ -40,11 +40,6 @@ export async function apiFetch(
   const headers: Record<string, string> = {
     ...(fetchOptions.headers as Record<string, string> ?? {}),
   };
-
-  const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
-  if (anonKey) {
-    headers["apikey"] = anonKey;
-  }
 
   if (auth) {
     const token = await getBearerToken();

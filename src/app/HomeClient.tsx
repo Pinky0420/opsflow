@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { collection, query, where, orderBy, limit, getDocs, addDoc } from "firebase/firestore";
+import { db, firebaseAuth } from "@/lib/firebase/client";
 
 type Department = {
   id: string;
@@ -64,12 +65,14 @@ export default function HomeClient({ role, departments, decisions, todos }: Prop
     if (!canReply) return;
     const k = keyOf(source_type, source_item_id);
     try {
-      const { data, error } = await createSupabaseBrowserClient()
-        .from("replies").select("id, source_type, source_item_id, reply_text, replied_at, created_at")
-        .eq("source_type", source_type).eq("source_item_id", source_item_id)
-        .order("replied_at", { ascending: false }).limit(20);
-      if (error) throw new Error(error.message || "fetch_failed");
-      setRepliesByKey((prev) => ({ ...prev, [k]: (data ?? []) as Reply[] }));
+      const snap = await getDocs(query(
+        collection(db, "replies"),
+        where("source_type", "==", source_type),
+        where("source_item_id", "==", source_item_id),
+        orderBy("replied_at", "desc"),
+        limit(20)
+      ));
+      setRepliesByKey((prev) => ({ ...prev, [k]: snap.docs.map((d) => ({ id: d.id, ...d.data() } as Reply)) }));
     } catch (e) {
       setErrorByKey((prev) => ({ ...prev, [k]: e instanceof Error ? e.message : "fetch_failed" }));
     }
@@ -156,15 +159,14 @@ export default function HomeClient({ role, departments, decisions, todos }: Prop
     setLoadingKey(k);
     setErrorByKey((prev) => ({ ...prev, [k]: null }));
     try {
-      const supabase = createSupabaseBrowserClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = firebaseAuth.currentUser;
       if (!user) throw new Error("unauthorized");
-      const replyId = crypto.randomUUID();
-      const { error: insertError } = await supabase.from("replies").insert({
-        id: replyId, source_type, source_item_id, reply_text,
-        audio_bucket: "reply-audio", audio_path: `${replyId}.webm`, replied_by: user.id,
+      await addDoc(collection(db, "replies"), {
+        source_type, source_item_id, reply_text,
+        replied_by: user.uid,
+        replied_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
       });
-      if (insertError) throw new Error(insertError.message || "save_failed");
       setDraftByKey((prev) => ({ ...prev, [k]: "" }));
       await loadReplies(source_type, source_item_id);
     } catch (e) {

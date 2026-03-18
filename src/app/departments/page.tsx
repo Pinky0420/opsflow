@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import AppHeader from "../_components/AppHeader";
 import { useSession } from "@/lib/useSession";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { collection, query, orderBy, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase/client";
 
 export default function DepartmentsPage() {
   const session = useSession({ redirectTo: "/departments" });
@@ -12,7 +13,7 @@ export default function DepartmentsPage() {
 
   useEffect(() => {
     if (session.status !== "ready") return;
-    createSupabaseBrowserClient().from("departments").select("id, name").order("name").then(({ data }) => setDepartments(data ?? []));
+    getDocs(query(collection(db, "departments"), orderBy("name"))).then((snap) => setDepartments(snap.docs.map((d) => ({ id: d.id, ...(d.data() as { name: string }) }))));
   }, [session.status]);
 
   if (session.status !== "ready") return <div className="min-h-screen bg-zinc-50" />;

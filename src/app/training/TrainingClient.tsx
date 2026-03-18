@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { collection, query, where, orderBy, limit, getDocs, doc, getDoc, updateDoc } from "firebase/firestore";
+import { db, firebaseAuth } from "@/lib/firebase/client";
 
 type Department = {
   id: string;
@@ -101,7 +102,7 @@ function uploadErrorMessage(code: string) {
     const [status, detail] = rest.split(":", 2);
     const suffix = detail ? `（${detail}）` : "";
     if ((detail || "").includes("Payload too large") || (detail || "").includes("maximum allowed size")) {
-      return "影片超過目前 Supabase Storage bucket 允許的大小，請調大 training-files 的 file size limit 或縮小影片檔案。";
+      return "影片超過 Google Drive 上傳大小限制，請縮小影片或分段上傳。";
     }
     if (status === "400") return `檔案上傳失敗（400），請檢查檔名格式或上傳參數${suffix}`;
     if (status === "403") return `檔案上傳失敗（403），可能沒有寫入權限${suffix}`;
@@ -146,17 +147,16 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [items, setItems] = useState<TrainingMaterialListItem[]>(initialItems);
-  useEffect(() => {
-    setItems(initialItems);
-  }, [initialItems]);
 
+  const hasFetchedRef = useRef(false);
   useEffect(() => {
     if (mode !== "read") return;
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
     void (async () => {
-      const supabase = createSupabaseBrowserClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = firebaseAuth.currentUser;
       if (!user) return;
-      void refreshList();
+      await refreshList();
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -212,27 +212,41 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
     setLoading(true);
     setListError(null);
     try {
-      const supabase = createSupabaseBrowserClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let query: any = supabase.from("training_materials")
-        .select("id, title, description, content_type, visibility, keywords, file_name, file_size, mime_type, status, created_at, updated_at, file_path, uploaded_by, updated_by")
-        .eq("status", "active").not("file_path", "is", null).not("file_name", "is", null)
-        .order("created_at", { ascending: false }).limit(50);
+      let q = query(
+        collection(db, "training_materials"),
+        where("status", "==", "active"),
+        where("file_path", "!=", ""),
+        orderBy("file_path"),
+        orderBy("created_at", "desc"),
+        limit(50)
+      );
+      if (contentType) q = query(collection(db, "training_materials"), where("status", "==", "active"), where("file_path", "!=", ""), where("content_type", "==", contentType), orderBy("file_path"), orderBy("created_at", "desc"), limit(50));
+      if (visibility) q = query(collection(db, "training_materials"), where("status", "==", "active"), where("file_path", "!=", ""), where("visibility", "==", visibility), orderBy("file_path"), orderBy("created_at", "desc"), limit(50));
+
+      const snap = await getDocs(q);
+      let raw = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TrainingMaterialListItem, "id">) })) as TrainingMaterialListItem[];
+
       if (search.trim()) {
-        const s = search.trim().replace(/[%_]/g, "\\$&");
-        query = query.or(`title.ilike.%${s}%,description.ilike.%${s}%,keywords.ilike.%${s}%`);
+        const s = search.trim().toLowerCase();
+        raw = raw.filter((item) =>
+          (item.title ?? "").toLowerCase().includes(s) ||
+          (item.description ?? "").toLowerCase().includes(s) ||
+          (item.keywords ?? "").toLowerCase().includes(s)
+        );
       }
-      if (contentType) query = query.eq("content_type", contentType);
-      if (visibility) query = query.eq("visibility", visibility);
-      const { data, error } = await query;
-      if (error) throw new Error((error as { message?: string }).message || "fetch_failed");
-      const raw = (data ?? []) as (TrainingMaterialListItem & { uploaded_by?: string | null; updated_by?: string | null; keywords?: string | null })[];
-      const profileIds = Array.from(new Set(raw.flatMap((i) => [i.uploaded_by, i.updated_by]).filter(Boolean))) as string[];
-      let peopleById = new Map<string, { account_id: string | null; display_name: string | null }>();
+
+      const profileIds = Array.from(new Set(raw.flatMap((i) => [i.uploaded_by, i.updated_by]).filter((x): x is string => !!x)));
+      const peopleById = new Map<string, { account_id: string | null; display_name: string | null }>();
       if (profileIds.length > 0) {
-        const { data: people } = await supabase.from("profiles").select("id, account_id, display_name").in("id", profileIds);
-        peopleById = new Map((people ?? []).map((p) => [p.id, { account_id: p.account_id ?? null, display_name: p.display_name ?? null }] as const));
+        const snaps = await Promise.all(profileIds.map((uid) => getDoc(doc(db, "users", uid))));
+        snaps.forEach((s) => {
+          if (s.exists()) {
+            const d = s.data() as { account_id?: string; display_name?: string };
+            peopleById.set(s.id, { account_id: d.account_id ?? null, display_name: d.display_name ?? null });
+          }
+        });
       }
+
       setItems(raw.map((item) => ({ ...item, keywords: item.keywords ?? "", uploader: item.uploaded_by ? peopleById.get(item.uploaded_by) ?? null : null, editor: item.updated_by ? peopleById.get(item.updated_by) ?? null : null })));
     } catch (e) {
       setListError(e instanceof Error ? e.message : "fetch_failed");
@@ -249,8 +263,7 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
     setDeletingId(id);
     setDeleteError(null);
     try {
-      const { error } = await createSupabaseBrowserClient().from("training_materials").update({ status: "deleted" }).eq("id", id).eq("status", "active");
-      if (error) throw new Error(error.message || "delete_failed");
+      await updateDoc(doc(db, "training_materials", id), { status: "deleted" });
       setItems((prev) => prev.filter((x) => x.id !== id));
       setSelectedIds((prev) => prev.filter((x) => x !== id));
     } catch (e) {
@@ -268,10 +281,8 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
     setBulkDeleting(true);
     setDeleteError(null);
     try {
-      const supabase = createSupabaseBrowserClient();
       for (const id of selectedIds) {
-        const { error } = await supabase.from("training_materials").update({ status: "deleted" }).eq("id", id).eq("status", "active");
-        if (error) throw new Error(error.message || "delete_failed");
+        await updateDoc(doc(db, "training_materials", id), { status: "deleted" });
       }
 
       setItems((prev) => prev.filter((x) => !selectedIds.includes(x.id)));
@@ -318,10 +329,9 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
     setUploadProgress(10);
     setUploadStep("驗證身份...");
     try {
-      const supabase = createSupabaseBrowserClient();
-      const { data: { session }, error: authErr } = await supabase.auth.getSession();
-      if (authErr) throw new Error(`auth_error: ${authErr.message}`);
-      if (!session) throw new Error("unauthorized");
+      const user = firebaseAuth.currentUser;
+      if (!user) throw new Error("unauthorized");
+      const idToken = await user.getIdToken();
 
       const meta = {
         title: title.trim(),
@@ -339,10 +349,10 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
       setUploadStep("上傳至 Google Drive 中...");
       setUploadProgress(30);
 
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const res = await fetch(`${supabaseUrl}/functions/v1/training-upload-drive`, {
+      const edgeFnUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const res = await fetch(`${edgeFnUrl}/functions/v1/training-upload-drive`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${idToken}` },
         body: formData,
       });
 
@@ -625,7 +635,7 @@ export default function TrainingClient({ role, departments, initialItems, mode, 
           <h2 className="text-base font-semibold">上傳教材</h2>
 
           <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500">
-            連線 Supabase：{(process.env.NEXT_PUBLIC_SUPABASE_URL || "(未設定)").replace(/https?:\/\//, "").split(".")[0]}
+            Firebase 專案：{process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "(未設定)"}
           </div>
 
           <form onSubmit={onUpload} className="mt-4 space-y-4">

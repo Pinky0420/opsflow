@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import AppHeader from "../../_components/AppHeader";
 import TrainingEditForm from "../TrainingEditForm";
 import { useSession } from "@/lib/useSession";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { collection, query, orderBy, getDocs, doc, getDoc, where } from "firebase/firestore";
+import { db } from "@/lib/firebase/client";
 
 type Material = {
   id: string; title: string; description: string | null;
@@ -26,17 +27,18 @@ function TrainingEditContent() {
 
   useEffect(() => {
     if (session.status !== "ready" || !id) return;
-    const supabase = createSupabaseBrowserClient();
 
     Promise.all([
-      supabase.from("training_materials").select("id, title, description, content_type, visibility, keywords, status").eq("id", id).maybeSingle(),
-      supabase.from("departments").select("id, name").order("name"),
-      supabase.from("training_material_departments").select("department_id").eq("material_id", id),
-    ]).then(([matResult, deptResult, matDeptResult]) => {
-      if (!matResult.data || matResult.data.status !== "active") { setNotFound(true); return; }
-      setMaterial(matResult.data as Material);
-      setDepartments(deptResult.data ?? []);
-      setMaterialDeptIds((matDeptResult.data ?? []).map((x) => x.department_id));
+      getDoc(doc(db, "training_materials", id)),
+      getDocs(query(collection(db, "departments"), orderBy("name"))),
+      getDocs(query(collection(db, "training_material_departments"), where("material_id", "==", id))),
+    ]).then(([matSnap, deptSnap, matDeptSnap]) => {
+      if (!matSnap.exists()) { setNotFound(true); return; }
+      const mat = { id: matSnap.id, ...matSnap.data() } as Material;
+      if (mat.status !== "active") { setNotFound(true); return; }
+      setMaterial(mat);
+      setDepartments(deptSnap.docs.map((d) => ({ id: d.id, ...(d.data() as { name: string }) })));
+      setMaterialDeptIds(matDeptSnap.docs.map((d) => (d.data() as { department_id: string }).department_id));
     });
   }, [session.status, id]);
 

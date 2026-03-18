@@ -2,8 +2,8 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { apiFetch } from "@/lib/api";
+import { signInWithEmailAndPassword, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "firebase/auth";
+import { firebaseAuth } from "@/lib/firebase/client";
 import { appPath } from "@/lib/appPath";
 
 function LoginFormContent() {
@@ -29,13 +29,13 @@ function LoginFormContent() {
 
   function errorMessage(code: string) {
     if (code === "email_not_allowed") return "這個 Email 尚未開通登入權限，請先由最高權限管理者新增。";
-    if (code === "email_rate_limited") return "寄送登入連結太頻繁，請稍後再試（建議等待幾分鐘）。";
-    if (code === "password_required") return "此帳號需使用密碼登入。請輸入密碼。";
+    if (code === "auth/user-not-found") return "此 Email 尚未開通登入權限。";
+    if (code === "auth/wrong-password") return "密碼錯誤，請確認後再試。";
+    if (code === "auth/invalid-credential") return "Email 或密碼錯誤，請確認後再試。";
+    if (code === "auth/too-many-requests") return "嘗試次數過多，請稍後再試。";
+    if (code === "auth/invalid-email") return "Email 格式不正確。";
     if (code === "missing_code") return "登入驗證連結缺少必要資訊，請重新索取。";
-    if (code === "missing_user") return "無法取得登入使用者資訊，請重新索取登入連結。";
     if (code.startsWith("send_link_failed:")) return `寄送登入連結失敗：${code.replace("send_link_failed:", "")}`;
-    if (code.startsWith("access_query_failed:")) return `權限檢查失敗：${code.replace("access_query_failed:", "")}`;
-    if (code.startsWith("profile_query_failed:")) return `權限檢查失敗：${code.replace("profile_query_failed:", "")}`;
     return code;
   }
 
@@ -45,45 +45,13 @@ function LoginFormContent() {
       setPolicyHint(null);
       return;
     }
-
     const id = ++policyRequestId.current;
-    const timer = window.setTimeout(async () => {
-      try {
-        const resp = await apiFetch(`/api/auth/login-policy?email=${encodeURIComponent(trimmed)}`);
-        const payload = (await resp.json()) as {
-          error?: string;
-          policy?: { allowed: boolean; mode: "magic" | "password"; access_level: "viewer" | "manager" | "admin" };
-        };
-
-        if (id !== policyRequestId.current) return;
-
-        if (!resp.ok || !payload.policy) {
-          setPolicyHint(null);
-          return;
-        }
-
-        if (!payload.policy.allowed) {
-          setPolicyHint("此 Email 尚未開通登入權限");
-          setMode("magic");
-          return;
-        }
-
-        setMode(payload.policy.mode);
-        if (payload.policy.mode === "password") {
-          setPolicyHint("此帳號需使用密碼登入（若是測試信箱收不到信，請由管理者先設定密碼）");
-        } else if (payload.policy.access_level !== "viewer") {
-          setPolicyHint("首次登入會寄送登入連結，登入後需設定密碼");
-        } else {
-          setPolicyHint("將寄送登入連結到信箱");
-        }
-      } catch {
-        if (id !== policyRequestId.current) return;
-        setPolicyHint(null);
-      }
+    const timer = window.setTimeout(() => {
+      if (id !== policyRequestId.current) return;
+      setPolicyHint(mode === "password" ? "請輸入密碼登入" : "將寄送登入連結到信箱");
     }, 350);
-
     return () => window.clearTimeout(timer);
-  }, [email]);
+  }, [email, mode]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -93,60 +61,42 @@ function LoginFormContent() {
 
     try {
       if (mode === "password") {
-        const supabase = createSupabaseBrowserClient();
-        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-        if (signInError) {
-          setError(signInError.message);
-          return;
-        }
-
-        const syncResp = await apiFetch("/api/auth/sync-profile", { method: "POST", auth: true });
-        const syncPayload = (await syncResp.json()) as { error?: string; require_password_setup?: boolean };
-        if (!syncResp.ok) {
-          await supabase.auth.signOut();
-          setError(errorMessage(syncPayload.error ?? "sync_failed"));
-          return;
-        }
-
-        if (syncPayload.require_password_setup) {
-          router.replace(`/auth/setup-password?next=${encodeURIComponent(redirectTo)}`);
-          router.refresh();
-          return;
-        }
-
+        await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
         window.location.assign(appPath(redirectTo));
         return;
       }
 
-      const response = await apiFetch("/api/auth/request-login-link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          redirect: redirectTo,
-        }),
-      });
-
-      const payload = (await response.json()) as { error?: string; ok?: boolean };
-
-      if (!response.ok) {
-        if (payload.error === "password_required") {
-          setMode("password");
-          setError(errorMessage(payload.error));
-          return;
-        }
-
-        setError(errorMessage(payload.error ?? "request_failed"));
-        return;
-      }
-
+      const actionCodeSettings = {
+        url: `${window.location.origin}${appPath("/auth/finish")}?next=${encodeURIComponent(redirectTo)}`,
+        handleCodeInApp: true,
+      };
+      await sendSignInLinkToEmail(firebaseAuth, email.trim(), actionCodeSettings);
+      window.localStorage.setItem("emailForSignIn", email.trim());
       setSuccess("登入連結已寄到你的信箱，請點信件中的連結完成登入。");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "request_failed");
+      const code = (err as { code?: string })?.code ?? (err instanceof Error ? err.message : "request_failed");
+      setError(errorMessage(code));
     } finally {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (isSignInWithEmailLink(firebaseAuth, window.location.href)) {
+      const savedEmail = window.localStorage.getItem("emailForSignIn") ?? "";
+      const emailToUse = savedEmail || (window.prompt("請輸入你的 Email 以完成登入：") ?? "");
+      if (!emailToUse) return;
+      signInWithEmailLink(firebaseAuth, emailToUse, window.location.href)
+        .then(() => {
+          window.localStorage.removeItem("emailForSignIn");
+          window.location.assign(appPath(redirectTo));
+        })
+        .catch((err: unknown) => {
+          setError((err as { code?: string })?.code ?? "finish_failed");
+        });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">

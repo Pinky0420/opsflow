@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { apiFetch } from "@/lib/api";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase/client";
 
 type Props = {
   id: string;
@@ -12,6 +12,8 @@ type Props = {
   canManage: boolean;
   mimeType: string | null;
   fileName: string | null;
+  filePath: string | null;
+  fileBucket: string | null;
 };
 
 function guessPreviewKind(mimeType: string | null, fileName: string | null) {
@@ -56,7 +58,7 @@ function downloadErrorMessage(code: string) {
   }
 }
 
-export default function TrainingDetailClient({ id, hasFile, canManage, mimeType, fileName }: Props) {
+export default function TrainingDetailClient({ id, hasFile, canManage, mimeType, fileName, filePath, fileBucket }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,21 +66,24 @@ export default function TrainingDetailClient({ id, hasFile, canManage, mimeType,
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
+  function getFileUrl(forDownload = false): string | null {
+    if (!filePath) return null;
+    if (fileBucket === "google-drive") {
+      return forDownload
+        ? `https://drive.google.com/uc?export=download&id=${filePath}`
+        : `https://drive.google.com/file/d/${filePath}/view`;
+    }
+    return null;
+  }
+
   async function onDownload() {
     setLoading(true);
     setError(null);
     try {
-      if (!hasFile) {
-        setError(downloadErrorMessage("no_file"));
-        return;
-      }
-
-      const res = await apiFetch(`/api/training/${id}/download-url`, { method: "POST", auth: true });
-      const json = (await res.json()) as { signedUrl?: string; error?: string };
-      if (!res.ok || !json.signedUrl) {
-        throw new Error(downloadErrorMessage(json.error || "download_failed"));
-      }
-      window.open(json.signedUrl, "_blank", "noopener,noreferrer");
+      if (!hasFile) { setError(downloadErrorMessage("no_file")); return; }
+      const url = getFileUrl(true);
+      if (!url) { setError(downloadErrorMessage("no_file")); return; }
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch (e) {
       setError(e instanceof Error ? e.message : downloadErrorMessage("download_failed"));
     } finally {
@@ -94,8 +99,7 @@ export default function TrainingDetailClient({ id, hasFile, canManage, mimeType,
     setDeleting(true);
     setError(null);
     try {
-      const { error: delErr } = await createSupabaseBrowserClient().from("training_materials").update({ status: "deleted" }).eq("id", id).eq("status", "active");
-      if (delErr) throw new Error(downloadErrorMessage(delErr.message || "delete_failed"));
+      await updateDoc(doc(db, "training_materials", id), { status: "deleted" });
       router.push("/training");
       router.refresh();
     } catch (e) {
@@ -128,12 +132,9 @@ export default function TrainingDetailClient({ id, hasFile, canManage, mimeType,
                 return;
               }
 
-              const res = await apiFetch(`/api/training/${id}/download-url`, { method: "POST", auth: true });
-              const json = (await res.json()) as { signedUrl?: string; error?: string };
-              if (!res.ok || !json.signedUrl) {
-                throw new Error(downloadErrorMessage(json.error || "download_failed"));
-              }
-              setPreviewUrl(json.signedUrl);
+                      const url = getFileUrl(false);
+              if (!url) throw new Error(downloadErrorMessage("no_file"));
+              setPreviewUrl(url);
             } catch (e) {
               setPreviewUrl(null);
               setError(e instanceof Error ? e.message : downloadErrorMessage("download_failed"));

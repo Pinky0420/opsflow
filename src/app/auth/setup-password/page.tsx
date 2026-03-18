@@ -2,8 +2,8 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { apiFetch } from "@/lib/api";
+import { updatePassword } from "firebase/auth";
+import { firebaseAuth } from "@/lib/firebase/client";
 
 function SetupPasswordContent() {
   const router = useRouter();
@@ -20,16 +20,9 @@ function SetupPasswordContent() {
   }, [searchParams]);
 
   useEffect(() => {
-    async function ensureSession() {
-      const supabase = createSupabaseBrowserClient();
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) {
-        router.replace(`/login?redirect=${encodeURIComponent(redirectTo)}`);
-        router.refresh();
-      }
+    if (!firebaseAuth.currentUser) {
+      router.replace(`/login?redirect=${encodeURIComponent(redirectTo)}`);
     }
-
-    void ensureSession();
   }, [redirectTo, router]);
 
   async function onSubmit(e: React.FormEvent) {
@@ -48,20 +41,9 @@ function SetupPasswordContent() {
 
     setLoading(true);
     try {
-      const supabase = createSupabaseBrowserClient();
-      const { error: updateError } = await supabase.auth.updateUser({ password });
-      if (updateError) {
-        setError(updateError.message);
-        return;
-      }
-
-      const resp = await apiFetch("/api/auth/mark-password-set", { method: "POST", auth: true });
-      const payload = (await resp.json()) as { error?: string };
-      if (!resp.ok) {
-        setError(payload.error ?? "mark_password_failed");
-        return;
-      }
-
+      const user = firebaseAuth.currentUser;
+      if (!user) throw new Error("unauthorized");
+      await updatePassword(user, password);
       router.replace(redirectTo);
       router.refresh();
     } catch (err) {

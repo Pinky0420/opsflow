@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import AppHeader from "../../_components/AppHeader";
 import TrainingDetailClient from "../TrainingDetailClient";
 import { useSession } from "@/lib/useSession";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase/client";
 
 type Material = {
   id: string; title: string; description: string | null; content_type: string;
@@ -27,15 +28,12 @@ function TrainingDetailContent() {
 
   useEffect(() => {
     if (session.status !== "ready" || !id) return;
-    createSupabaseBrowserClient()
-      .from("training_materials")
-      .select("id, title, description, content_type, visibility, keywords, file_name, file_size, mime_type, status, file_bucket, file_path, created_at, updated_at")
-      .eq("id", id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!data || data.status !== "active") { setNotFound(true); return; }
-        setMaterial(data as Material);
-      });
+    getDoc(doc(db, "training_materials", id)).then((snap) => {
+      if (!snap.exists()) { setNotFound(true); return; }
+      const data = { id: snap.id, ...snap.data() } as Material;
+      if (data.status !== "active") { setNotFound(true); return; }
+      setMaterial(data);
+    });
   }, [session.status, id]);
 
   useEffect(() => {
@@ -91,6 +89,8 @@ function TrainingDetailContent() {
               canManage={canManage}
               mimeType={material.mime_type ?? null}
               fileName={material.file_name ?? null}
+              filePath={material.file_path ?? null}
+              fileBucket={material.file_bucket ?? null}
             />
           </div>
         </section>
